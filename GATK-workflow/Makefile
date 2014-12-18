@@ -1,6 +1,6 @@
 # !!!! Configure variables required in this Makefile !!!!
 include config.mk
-.PRECIOUS : %.sam %.bam %.vcf %.intervals %.grp %.nodup.bam %.bai
+.PRECIOUS : %.sam %.bam %.vcf %.realn.intervals %.recal.grp %.nodup.bam %.bai %.realn.bam %.bqsr.bam %.gatk.vcf %.indel.vcf %.snp.vcf %.snp.vqsr.vcf %.indel.vqsr.vcf
 READGROUPS=0 1 2
 CHROMOSOMES=1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X Y M
 
@@ -67,15 +67,15 @@ chromosomes : ${CHR_SPLIT_BAM} ${CHR_CHR_METRICS}
 	${TOOLS}/samtools/samtools index $@
 
 %.realn.intervals : %.nodup.bam
-	java -jar ${TOOLS}/gatk-protected/target/GenomeAnalysisTK.jar -T RealignerTargetCreator -I $< -R ${ALIGN_BASE}/${ALIGN_GENOME} -o $@ -known ${ANNOTATION}/Mills_and_1000G_gold_standard.indels.hg19.vcf -known ${ANNOTATION}/1000G_phase1.indels.hg19.vcf -nt $(DATA_THREADS)
+	java -jar ${TOOLS}/gatk-protected/target/GenomeAnalysisTK.jar -T RealignerTargetCreator -I $< -R ${ALIGN_BASE}/${ALIGN_GENOME} -o $@ -known ${ANNOTATION}/Mills_and_1000G_gold_standard.indels.hg19_chrMfix.vcf -known ${ANNOTATION}/1000G_phase1.indels.hg19_chrMfix.vcf -nt $(DATA_THREADS)
 
 %.realn.bam : %.nodup.bam
 	${MAKE} ${@:bam=intervals}
-	java -jar ${TOOLS}/gatk-protected/target/GenomeAnalysisTK.jar -T IndelRealigner -I $< -R ${ALIGN_BASE}/${ALIGN_GENOME} -o $@ -targetIntervals ${@:bam=intervals} -known ${ANNOTATION}/Mills_and_1000G_gold_standard.indels.hg19.vcf -known ${ANNOTATION}/1000G_phase1.indels.hg19.vcf
+	java -jar ${TOOLS}/gatk-protected/target/GenomeAnalysisTK.jar -T IndelRealigner -I $< -R ${ALIGN_BASE}/${ALIGN_GENOME} -o $@ -targetIntervals ${@:bam=intervals} -known ${ANNOTATION}/Mills_and_1000G_gold_standard.indels.hg19_chrMfix.vcf -known ${ANNOTATION}/1000G_phase1.indels.hg19_chrMfix.vcf
 	${TOOLS}/samtools/samtools index $@
 
 %.recal.grp : %.realn.bam
-	java -jar ${TOOLS}/gatk-protected/target/GenomeAnalysisTK.jar -T BaseRecalibrator -I $< -R ${ALIGN_BASE}/${ALIGN_GENOME} -o $@ -knownSites ${ANNOTATION}/Mills_and_1000G_gold_standard.indels.hg19.vcf -knownSites ${ANNOTATION}/1000G_phase1.indels.hg19.vcf -knownSites ${ANNOTATION}/dbsnp_137.hg19.vcf -nct $(CPU_THREADS)
+	java -jar ${TOOLS}/gatk-protected/target/GenomeAnalysisTK.jar -T BaseRecalibrator -I $< -R ${ALIGN_BASE}/${ALIGN_GENOME} -o $@ -knownSites ${ANNOTATION}/Mills_and_1000G_gold_standard.indels.hg19_chrMfix.vcf -knownSites ${ANNOTATION}/1000G_phase1.indels.hg19_chrMfix.vcf -knownSites ${ANNOTATION}/dbsnp_137.hg19_chrMfix.vcf -nct $(CPU_THREADS)
 
 %.bqsr.bam : %.realn.bam
 	${MAKE} ${@:bqsr.bam=recal.grp}
@@ -84,7 +84,7 @@ chromosomes : ${CHR_SPLIT_BAM} ${CHR_CHR_METRICS}
 
 %.gatk.vcf : %.bqsr.bam
 	# Use UnifiedGenotyper with -nt to parallelize 
-	java -jar ${TOOLS}/gatk-protected/target/GenomeAnalysisTK.jar -T HaplotypeCaller -R ${ALIGN_BASE}/${ALIGN_GENOME} -I $< --dbsnp ${ANNOTATION}/dbsnp_137.hg19.vcf -o $@ -stand_call_conf 20.0 -stand_emit_conf 10.0 -gt_mode DISCOVERY
+	java -jar ${TOOLS}/gatk-protected/target/GenomeAnalysisTK.jar -T HaplotypeCaller -R ${ALIGN_BASE}/${ALIGN_GENOME} -I $< --dbsnp ${ANNOTATION}/dbsnp_137.hg19_chrMfix.vcf -o $@ -stand_call_conf 20.0 -stand_emit_conf 10.0 -gt_mode DISCOVERY
 
 #XXX better to put CHR_GATK_VCF on first line for parallism, but some syntax problem needs to be investigated
 all.vcf : ${CHR_GATK_VCF}
@@ -100,7 +100,7 @@ all.vcf : ${CHR_GATK_VCF}
 	java -jar ${TOOLS}/gatk-protected/target/GenomeAnalysisTK.jar -T VariantRecalibrator -R ${ALIGN_BASE}/${ALIGN_GENOME} -input $< \
 	-resource:hapmap,known=false,training=true,truth=true,prior=15.0 ${ANNOTATION}/hapmap_3.3.hg19.vcf \
 	-resource:omni,known=false,training=true,truth=true,prior=12.0 ${ANNOTATION}/1000G_omni2.5.hg19.vcf \
-	-resource:1000G,known=false,training=true,truth=false,prior=10.0 ${ANNOTATION}/1000G_phase1.snps.high_confidence.hg19.vcf \
+	-resource:1000G,known=false,training=true,truth=false,prior=10.0 ${ANNOTATION}/1000G_phase1.snps.high_confidence.hg19_chrMfix.vcf \
 	-resource:dbsnp,known=true,training=false,truth=false,prior=2.0 ${ANNOTATION}/dbsnp_137.b37.unmangled.vcf \
 	-mode SNP \
 	-an DP \
