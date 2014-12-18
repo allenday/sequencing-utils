@@ -2,14 +2,20 @@
 include config.mk
 .PRECIOUS : %.sam %.bam %.vcf %.realn.intervals %.recal.grp %.nodup.bam %.bai %.realn.bam %.bqsr.bam %.gatk.vcf %.indel.vcf %.snp.vcf %.snp.vqsr.vcf %.indel.vqsr.vcf
 READGROUPS=0 1 2
-CHROMOSOMES=1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X Y M
+CHROMOSOMES=1 M Y 22 21 20 19 2 18 17 16 15 3 14 4 13 5 12 6 11 7 10 9 8 X
 
-CHR_SPLIT_BAM:=${shell perl -e '@F=split/\s+/,"${CHROMOSOMES}";print map{"chr$$_.split.bam "}@F'}
-CHR_CHR_METRICS:=${shell perl -e '@F=split/\s+/,"${CHROMOSOMES}";print map{"chr$$_.chr.metrics "}@F'}
-CHR_GATK_VCF:=${shell perl -e '@F=split/\s+/,"${CHROMOSOMES}";print map{"chr$$_.gatk.vcf "}@F'}
 CHR_TAGGED_BAM:=${shell perl -e '@F=split/\s+/,"${CHROMOSOMES}";print map{"chr$$_.tagged.bam "}@F'}
+CHR_SPLIT_BAM:=${shell perl -e '@F=split/\s+/,"${CHROMOSOMES}";print map{"chr$$_.split.bam "}@F'}
+CHR_NODUP_BAM:=${shell perl -e '@F=split/\s+/,"${CHROMOSOMES}";print map{"chr$$_.nodup.bam "}@F'}
+CHR_CHR_METRICS:=${shell perl -e '@F=split/\s+/,"${CHROMOSOMES}";print map{"chr$$_.chr.metrics "}@F'}
+CHR_INTERVALS:=${shell perl -e '@F=split/\s+/,"${CHROMOSOMES}";print map{"chr$$_.realn.intervals "}@F'}
+CHR_REALIGN:=${shell perl -e '@F=split/\s+/,"${CHROMOSOMES}";print map{"chr$$_.realn.bam "}@F'}
+CHR_RECAL:=${shell perl -e '@F=split/\s+/,"${CHROMOSOMES}";print map{"chr$$_.recal.grp "}@F'}
+CHR_BQSR_BAM:=${shell perl -e '@F=split/\s+/,"${CHROMOSOMES}";print map{"chr$$_.bqsr.bam "}@F'}
+CHR_GATK_VCF:=${shell perl -e '@F=split/\s+/,"${CHROMOSOMES}";print map{"chr$$_.gatk.vcf "}@F'}
 
-all: qc all.vcf
+
+all: samheaders all.bam qc all.vcf
 
 clean:
 	rm -f *.bam *.bai *.vcf *.grp *.intervals *.idx
@@ -17,6 +23,9 @@ clean:
 qc: ${CHR_SPLIT_BAM}
 	mkdir -p metrics
 	${MAKE} ${CHR_CHR_METRICS}
+
+%.bam.bai : %.bam
+	${TOOLS}/samtools/samtools index $<
 
 %.base.sam : %.fq
 	cat $< | ${TOOLS}/bwa/bwa mem ${ALIGN_BASE}/${ALIGN_GENOME} - | perl -ne 'chomp;print "$_";print "\tRG:Z:0" unless m/^@/;print "\n"' | ${TOOLS}/samtools/samtools sort -O sam -T /tmp/sam$$. | grep -vE '^@' > $@
@@ -26,7 +35,7 @@ qc: ${CHR_SPLIT_BAM}
 
 %.tagged.bam : %.tagged.sam
 	cat ${SAM_HEADER} $< | ${TOOLS}/samtools/samtools view -b - > $@
-	${TOOLS}/samtools/samtools index $@
+	${MAKE} $@.bai
 
 %.rg.metrics : %.tagged.bam
 	ALIGN_BASE=${ALIGN_BASE}/${ALIGN_GENOME} TOOLS=${TOOLS} bash ../bin/picard_metrics.sh $<
@@ -43,13 +52,16 @@ all.bam :
 	else \
 	  ln -s `ls RG*.tagged.bam` $@; \
 	fi
-	${TOOLS}/samtools/samtools index $@
+	${MAKE} $@.bai
 
 ####
-chromosomes : ${CHR_SPLIT_BAM} ${CHR_CHR_METRICS}
-	#for i in ${CHROMOSOMES}; do ${MAKE} chr$$i.split.bam; done
-	#for i in ${CHROMOSOMES}; do ${MAKE} chr$$i.chr.metrics; done
-
+chromosomes : ${CHR_SPLIT_BAM}
+nodups : ${CHR_NODUP_BAM}
+intervals : ${CHR_INTERVALS}
+realign : ${CHR_REALIGN}
+recal : ${CHR_RECAL}
+bqsr : ${CHR_BQSR_BAM}
+vcf : ${CHR_GATK_VCF}
 
 %.split.bam : all.bam
 	${TOOLS}/samtools/samtools view -b all.bam $(@:.split.bam=) > $@.tmp
@@ -64,7 +76,7 @@ chromosomes : ${CHR_SPLIT_BAM} ${CHR_CHR_METRICS}
 
 %.nodup.bam : %.split.bam
 	java -jar ${TOOLS}/picard/dist/picard.jar MarkDuplicates I=$< O=$@ M=metrics/${@:bam=}metrics VALIDATION_STRINGENCY=SILENT ASSUME_SORTED=true REMOVE_DUPLICATES=false
-	${TOOLS}/samtools/samtools index $@
+	${MAKE} $@.bai
 
 %.realn.intervals : %.nodup.bam
 	java -jar ${TOOLS}/gatk-protected/target/GenomeAnalysisTK.jar -T RealignerTargetCreator -I $< -R ${ALIGN_BASE}/${ALIGN_GENOME} -o $@ -known ${ANNOTATION}/Mills_and_1000G_gold_standard.indels.hg19_chrMfix.vcf -known ${ANNOTATION}/1000G_phase1.indels.hg19_chrMfix.vcf -nt $(DATA_THREADS)
@@ -72,7 +84,7 @@ chromosomes : ${CHR_SPLIT_BAM} ${CHR_CHR_METRICS}
 %.realn.bam : %.nodup.bam
 	${MAKE} ${@:bam=intervals}
 	java -jar ${TOOLS}/gatk-protected/target/GenomeAnalysisTK.jar -T IndelRealigner -I $< -R ${ALIGN_BASE}/${ALIGN_GENOME} -o $@ -targetIntervals ${@:bam=intervals} -known ${ANNOTATION}/Mills_and_1000G_gold_standard.indels.hg19_chrMfix.vcf -known ${ANNOTATION}/1000G_phase1.indels.hg19_chrMfix.vcf
-	${TOOLS}/samtools/samtools index $@
+	${MAKE} $@.bai
 
 %.recal.grp : %.realn.bam
 	java -jar ${TOOLS}/gatk-protected/target/GenomeAnalysisTK.jar -T BaseRecalibrator -I $< -R ${ALIGN_BASE}/${ALIGN_GENOME} -o $@ -knownSites ${ANNOTATION}/Mills_and_1000G_gold_standard.indels.hg19_chrMfix.vcf -knownSites ${ANNOTATION}/1000G_phase1.indels.hg19_chrMfix.vcf -knownSites ${ANNOTATION}/dbsnp_137.hg19_chrMfix.vcf -nct $(CPU_THREADS)
@@ -80,7 +92,7 @@ chromosomes : ${CHR_SPLIT_BAM} ${CHR_CHR_METRICS}
 %.bqsr.bam : %.realn.bam
 	${MAKE} ${@:bqsr.bam=recal.grp}
 	java -jar ${TOOLS}/gatk-protected/target/GenomeAnalysisTK.jar -T PrintReads -I $< -R ${ALIGN_BASE}/${ALIGN_GENOME} -BQSR ${@:bqsr.bam=recal.grp} -o $@ -nct $(CPU_THREADS)
-	${TOOLS}/samtools/samtools index $@
+	${MAKE} $@.bai
 
 %.gatk.vcf : %.bqsr.bam
 	# Use UnifiedGenotyper with -nt to parallelize 
@@ -96,7 +108,7 @@ all.vcf : ${CHR_GATK_VCF}
 %.indel.vcf : %.vcf
 	java -jar ${TOOLS}/gatk-protected/target/GenomeAnalysisTK.jar -T SelectVariants -R ${ALIGN_BASE}/${ALIGN_GENOME} -V $< -o $@ -selectType INDEL -nt $(DATA_THREADS)
 
-%.snp.vqsr : %.snp.vcf
+%.snp.vqsr.vcf : %.snp.vcf
 	java -jar ${TOOLS}/gatk-protected/target/GenomeAnalysisTK.jar -T VariantRecalibrator -R ${ALIGN_BASE}/${ALIGN_GENOME} -input $< \
 	-resource:hapmap,known=false,training=true,truth=true,prior=15.0 ${ANNOTATION}/hapmap_3.3.hg19.vcf \
 	-resource:omni,known=false,training=true,truth=true,prior=12.0 ${ANNOTATION}/1000G_omni2.5.hg19.vcf \
