@@ -64,9 +64,14 @@ bqsr : ${CHR_BQSR_BAM}
 vcf : ${CHR_GATK_VCF}
 
 %.split.bam : all.bam
-	${TOOLS}/samtools/samtools view -b all.bam $(@:.split.bam=) > $@.tmp
-	${TOOLS}/samtools/samtools reheader ${SAM_HEADER} $@.tmp > $@
+	###this strategy (reheader) doesn't work, but in samtools
+	#${TOOLS}/samtools/samtools view -b $< $(@:.split.bam=) > $@.tmp
+	#${TOOLS}/samtools/samtools reheader ${SAM_HEADER} $@.tmp > $@
+	cat ${SAM_HEADER} > $@.tmp
+	${TOOLS}/samtools/samtools view $< $(@:.split.bam=) >> $@.tmp
+	${TOOLS}/samtools/samtools view -b $@.tmp > $@
 	rm $@.tmp
+
 	#${TOOLS}/samtools/samtools view -b all.bam $(@:.split.bam=) > $@
 
 	#cat ${SAM_HEADER} > $(@:.bam=.sam)
