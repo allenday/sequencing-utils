@@ -15,9 +15,9 @@ all:
 	#unused ${MAKE} bamtools.built
 	${MAKE} gatk.built
 	${MAKE} gatk-protected.built
-  ${MAKE} kentUtils.built
-  ${MAKE} libmaus.built
-  ${MAKE} biobambam.built
+	${MAKE} kentUtils.built
+	${MAKE} libmaus.built
+	${MAKE} biobambam.built
 
 clean:
 	rm -rf ${PROJECTS}
@@ -72,17 +72,18 @@ gatk-protected.built:
 
 kentUtils.built:
 	git clone git@github.com:${GITHUB_USER}/kentUtils.git
-  cd kentUtils && make && cd ..
-  #touch $@
+	cd kentUtils && make && cd ..
+	touch $@
 
 libmaus.built:
 	git clone git@github.com:${GITHUB_USER}/libmaus.git
-  #touch $@
+	cd libmaus && autoreconf -i -f && ./configure --prefix=/opt/bio && make install && cd ..
+	touch $@
 
 biobambam.built:
 	git clone git@github.com:${GITHUB_USER}/biobambam.git
-  #touch $@
-
+	cd biobambam && autoreconf -i -f && ./configure --with-libmaus=/opt/bio --prefix=/opt/bio && make install && cd ..
+	touch $@
 
 ####
 #chromosome files
