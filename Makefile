@@ -16,6 +16,9 @@ all:
 	${MAKE} bamtools.built
 	${MAKE} gatk.built
 	${MAKE} gatk-protected.built
+  ${MAKE} kentUtils.built
+  ${MAKE} libmaus.built
+  ${MAKE} biobambam.built
 
 clean:
 	rm -rf ${PROJECTS}
@@ -67,6 +70,20 @@ gatk-protected.built:
 	git clone git@github.com:${GITHUB_USER}/gatk-protected.git
 	cd gatk-protected && mvn package install && cd ..
 	touch $@
+
+kentUtils.built:
+	git clone git@github.com:${GITHUB_USER}/kentUtils.git
+  cd kentUtils && make && cd ..
+  #touch $@
+
+libmaus.built:
+	git clone git@github.com:${GITHUB_USER}/libmaus.git
+  #touch $@
+
+biobambam.built:
+	git clone git@github.com:${GITHUB_USER}/biobambam.git
+  #touch $@
+
 
 ####
 #annotation files
